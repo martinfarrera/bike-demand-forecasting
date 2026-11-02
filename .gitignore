@@ -3,6 +3,7 @@ data/raw/*
 !data/raw/README.md
 reports/*
 !reports/.gitkeep
+!reports/model-results.md
 __pycache__/
 *.py[cod]
 .venv/
