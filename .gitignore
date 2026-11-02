@@ -1,0 +1,10 @@
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+reports/*
+!reports/.gitkeep
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
