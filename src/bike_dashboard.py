@@ -38,10 +38,26 @@ def build_dashboard_data(frame: pd.DataFrame) -> dict:
 
     ordered = frame.sort_values("timestamp")
     hourly = _group_means(ordered, "hr", [str(hour) for hour in range(24)])
+    hourly_groups = ordered.groupby(["hr", "workingday"])["cnt"].mean()
+    hourly_workday = [
+        {
+            "label": str(hour),
+            "workday": (
+                float(hourly_groups.get((hour, 1)))
+                if (hour, 1) in hourly_groups.index else None
+            ),
+            "non_workday": (
+                float(hourly_groups.get((hour, 0)))
+                if (hour, 0) in hourly_groups.index else None
+            ),
+        }
+        for hour in range(24)
+    ]
     weekdays = _group_means(ordered, "weekday", list(WEEKDAYS))
     seasons = _group_means(ordered, "season", [SEASONS[index] for index in range(1, 5)])
     return {
         "hourly": hourly,
+        "hourly_workday": hourly_workday,
         "weekdays": weekdays,
         "seasons": seasons,
         "models": metrics,
@@ -61,13 +77,14 @@ _PAGE = r'''<!doctype html>
 :root{color-scheme:light;--ink:#18312b;--muted:#536b64;--accent:#147d64;--paper:#f4f7f4;--card:#fff}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
 main{max-width:1100px;margin:auto;padding:2rem 1.25rem}h1,h2{line-height:1.2}h1{font-size:clamp(2rem,5vw,3.4rem);margin:.3rem 0}h2{font-size:1.25rem}.eyebrow,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem;margin:1.4rem 0}
-section,.metric,.note{background:var(--card);border-radius:14px;padding:1.1rem;box-shadow:0 2px 12px #16382a0d}.chart{width:100%;height:230px;overflow:visible}.bars{display:flex;align-items:end;gap:3px;height:170px;border-bottom:1px solid #cad7d0;padding-top:10px}.bar{flex:1;min-width:3px;background:var(--accent);border-radius:3px 3px 0 0;position:relative}.bar:hover{background:#e28b35}.axis{display:flex;justify-content:space-between;color:var(--muted);font-size:.75rem;margin-top:.35rem}.metric-row{display:flex;gap:.8rem;flex-wrap:wrap}.metric{flex:1;min-width:180px}.value{font-size:1.8rem;font-weight:700}.note{border-left:5px solid #e28b35}.table{width:100%;border-collapse:collapse}.table td,.table th{text-align:left;padding:.5rem;border-bottom:1px solid #e5ece7}footer{margin-top:1.5rem;color:var(--muted);font-size:.9rem}
+section,.metric,.note{background:var(--card);border-radius:14px;padding:1.1rem;box-shadow:0 2px 12px #16382a0d}.chart{width:100%;height:230px;overflow:visible}.bars{display:flex;align-items:end;gap:3px;height:170px;border-bottom:1px solid #cad7d0;padding-top:10px}.bar{flex:1;min-width:3px;background:var(--accent);border-radius:3px 3px 0 0;position:relative}.bar:hover{background:#e28b35}.hour-group{display:flex;align-items:flex-end;gap:1px;flex:1;height:100%;min-width:4px}.bar.workday-bar{background:#147d64}.bar.nonworkday-bar{background:#e28b35}.legend{display:flex;gap:1rem;color:var(--muted);font-size:.85rem;margin-top:.6rem}.legend span:before{content:"";display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#147d64;margin-right:.35rem}.legend .nonwork:before{background:#e28b35}.axis{display:flex;justify-content:space-between;color:var(--muted);font-size:.75rem;margin-top:.35rem}.metric-row{display:flex;gap:.8rem;flex-wrap:wrap}.metric{flex:1;min-width:180px}.value{font-size:1.8rem;font-weight:700}.note{border-left:5px solid #e28b35}.table{width:100%;border-collapse:collapse}.table td,.table th{text-align:left;padding:.5rem;border-bottom:1px solid #e5ece7}footer{margin-top:1.5rem;color:var(--muted);font-size:.9rem}
 </style></head><body><main>
 <p class="eyebrow">UCI BIKE SHARING · HISTORICAL DATA</p><h1>Bike-sharing demand dashboard</h1>
 <p class="muted">Explore observed hourly rental patterns and a chronological model comparison.</p>
 <div class="metric-row" id="metrics"></div>
 <div class="grid"><section><h2>Average rentals by hour</h2><div id="hourly-mean-chart" class="chart"></div><p class="muted">Mean rentals per observed hour across the dataset.</p></section>
 <section><h2>Average rentals by weekday</h2><div id="weekday-chart" class="chart"></div><p class="muted">UCI weekday codes: Sunday (0) through Saturday (6).</p></section>
+<section><h2>Hourly demand: workday vs non-working day</h2><div id="workday-hourly-chart" class="chart"></div><div class="legend"><span>Workday</span><span class="nonwork">Non-working day</span></div><p class="muted">Mean observed rentals for each hour; non-working days include weekends and holidays.</p></section>
 <section><h2>Average rentals by season</h2><div id="season-chart" class="chart"></div><p class="muted">Winter, spring, summer and fall.</p></section>
 <section><h2>Holdout model comparison</h2><table class="table"><thead><tr><th>Method</th><th>MAE</th><th>RMSE</th></tr></thead><tbody id="model-table"></tbody></table><p class="muted">Errors are rentals per observed hour; lower is better.</p></section></div>
 <aside class="note"><h2>How to interpret this</h2><p>Observed historical weather is a limitation: the decision tree uses weather measurements from each evaluated hour. That observed historical weather would not generally be known when making a real forecast. These results are retrospective and do not demonstrate operational future-weather forecasting performance.</p><p>The evaluation trains before <strong>2012-10-01</strong> and tests on the later observed quarter. Missing hours are not filled with zero demand. The data represent one bike-sharing system in 2011–2012.</p></aside>
@@ -77,6 +94,8 @@ section,.metric,.note{background:var(--card);border-radius:14px;padding:1.1rem;b
 const d=JSON.parse(document.getElementById('dashboard-data').textContent);
 function chart(id,rows){const el=document.getElementById(id),max=Math.max(...rows.map(x=>x.mean),1);const bars=document.createElement('div');bars.className='bars';rows.forEach(x=>{const b=document.createElement('div');b.className='bar';b.style.height=Math.max(2,x.mean/max*100)+'%';b.title=x.label+': '+x.mean.toFixed(1)+' rentals';bars.appendChild(b)});const axis=document.createElement('div');axis.className='axis';axis.innerHTML='<span>'+rows[0].label+'</span><span>'+rows[Math.floor(rows.length/2)].label+'</span><span>'+rows.at(-1).label+'</span>';el.append(bars,axis)}
 chart('hourly-mean-chart',d.hourly);chart('weekday-chart',d.weekdays);chart('season-chart',d.seasons);
+function comparisonChart(id,rows){const el=document.getElementById(id),values=rows.flatMap(x=>[x.workday,x.non_workday]).filter(x=>x!==null),max=Math.max(...values,1);const bars=document.createElement('div');bars.className='bars';rows.forEach(x=>{const group=document.createElement('div');group.className='hour-group';[['workday',x.workday],['nonworkday',x.non_workday]].forEach(([kind,value])=>{const b=document.createElement('div');b.className='bar '+kind+'-bar';b.style.height=value===null?'0%':Math.max(2,value/max*100)+'%';b.title=value===null?x.label+': no observations':x.label+': '+value.toFixed(1)+' rentals';group.appendChild(b)});bars.appendChild(group)});const axis=document.createElement('div');axis.className='axis';axis.innerHTML='<span>0</span><span>12</span><span>23</span>';el.append(bars,axis)}
+comparisonChart('workday-hourly-chart',d.hourly_workday);
 const metrics=document.getElementById('metrics');[['Holdout period',d.holdout_start+' to '+d.holdout_end],['Observed holdout hours',d.holdout_rows.toLocaleString()]].forEach(([label,value])=>{const card=document.createElement('div');card.className='metric';card.innerHTML='<div class="muted">'+label+'</div><div class="value">'+value+'</div>';metrics.appendChild(card)});
 const names={hour_workday_mean:'Hour/workday mean',decision_tree:'Decision tree'};document.getElementById('model-table').innerHTML=Object.entries(d.models).map(([key,m])=>'<tr><td>'+names[key]+'</td><td>'+m.mae.toFixed(2)+'</td><td>'+m.rmse.toFixed(2)+'</td></tr>').join('');
 </script></main></body></html>'''

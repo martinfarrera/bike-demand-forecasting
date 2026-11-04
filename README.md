@@ -10,7 +10,7 @@ With Python dependencies from `requirements.txt` installed and the UCI `hour.csv
 python -m src.bike_dashboard
 ```
 
-Open `reports/dashboard.html` in a browser. The self-contained page shows average rentals by hour, weekday, and season, plus MAE/RMSE for the holdout models. It embeds only aggregate chart data and evaluation scores; raw data remain local and ignored by Git. The page explains the observed-weather limitation and chronological split.
+Open `reports/dashboard.html` in a browser. The self-contained page shows average rentals by hour, weekday, and season, compares hourly demand on workdays versus non-working days (weekends and holidays), and reports MAE/RMSE for the holdout models. It embeds only aggregate chart data and evaluation scores; raw data remain local and ignored by Git. The page explains the observed-weather limitation and chronological split.
 
 To choose paths explicitly:
 

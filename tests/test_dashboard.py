@@ -32,6 +32,11 @@ def test_dashboard_data_includes_patterns_and_model_comparison():
     payload = build_dashboard_data(sample_data())
     assert len(payload["hourly"]) == 24
     assert payload["hourly"][0]["mean"] == 20
+    assert len(payload["hourly_workday"]) == 24
+    assert payload["hourly_workday"][0] == {
+        "label": "0", "workday": 30.0, "non_workday": 10.0
+    }
+    assert payload["hourly_workday"][1]["workday"] is None
     assert len(payload["weekdays"]) == 7
     assert payload["seasons"][2]["mean"] == 50
     assert payload["models"]["hour_workday_mean"]["mae"] == pytest.approx(25 / 3)
@@ -44,6 +49,8 @@ def test_dashboard_is_self_contained_and_discloses_limitations():
     assert "Bike-sharing demand dashboard" in html
     assert "Observed historical weather" in html
     assert "hourly-mean-chart" in html
+    assert "workday-hourly-chart" in html
+    assert "non-working days include weekends and holidays" in html
     embedded = html.split('<script id="dashboard-data" type="application/json">', 1)[1]
     embedded = embedded.split("</script>", 1)[0]
     assert json.loads(embedded)["holdout_rows"] == 2
