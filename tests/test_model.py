@@ -66,10 +66,30 @@ def test_baseline_uses_group_mean_and_global_fallback():
     np.testing.assert_array_equal(predictions["hour_workday_mean"], [10, 20])
 
 
+def test_calendar_only_tree_excludes_weather_and_weather_tree_can_use_it():
+    train = pd.DataFrame({name: np.zeros(80) for name in FEATURES})
+    train["temp"] = np.repeat([0.0, 1.0], 40)
+    train["cnt"] = np.repeat([10.0, 100.0], 40)
+    test = pd.DataFrame({name: np.zeros(40) for name in FEATURES})
+    test["temp"] = np.repeat([0.0, 1.0], 20)
+    test["cnt"] = np.repeat([10.0, 100.0], 20)
+
+    predictions = fit_predict(train, test)
+
+    np.testing.assert_array_equal(predictions["calendar_only_decision_tree"], [55.0] * 40)
+    assert np.mean(np.abs(predictions["decision_tree"] - test["cnt"].to_numpy())) < 1
+
+
 def test_metrics_are_per_observed_hour_in_count_units():
     result = evaluate(observations())
     assert result["split"]["train"]["rows"] == 2
     assert result["split"]["test"]["rows"] == 2
+    assert result["calendar_features"] == [
+        "hr", "weekday", "mnth", "yr", "holiday", "workingday"
+    ]
+    assert set(result["metrics"]) == {
+        "hour_workday_mean", "calendar_only_decision_tree", "decision_tree"
+    }
     for metrics in result["metrics"].values():
         assert metrics["mae"] == 40
         assert metrics["rmse"] == pytest.approx(np.sqrt(1700))

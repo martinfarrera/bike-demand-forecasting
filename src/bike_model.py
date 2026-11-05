@@ -1,4 +1,4 @@
-"""Retrospective chronological evaluation; reads local data and prints JSON only."""
+"""Compare baseline and tree variants on a chronological holdout; print JSON only."""
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from sklearn.tree import DecisionTreeRegressor
 from src.bike_data import load_hourly_data
 
 CUTOFF = "2012-10-01"
-FEATURES = (
+CALENDAR_FEATURES = (
     "hr", "weekday", "mnth", "yr", "holiday", "workingday",
-    "weathersit", "temp", "atemp", "hum", "windspeed",
+)
+FEATURES = (
+    *CALENDAR_FEATURES, "weathersit", "temp", "atemp", "hum", "windspeed",
 )
 
 
@@ -48,11 +50,14 @@ def fit_predict(train: pd.DataFrame, test: pd.DataFrame) -> dict[str, np.ndarray
     means = train.groupby(["hr", "workingday"])["cnt"].mean()
     keys = pd.MultiIndex.from_frame(test[["hr", "workingday"]])
     baseline = means.reindex(keys).fillna(train["cnt"].mean()).to_numpy()
-    model = DecisionTreeRegressor(max_depth=8, min_samples_leaf=20, random_state=0)
-    model.fit(train.loc[:, FEATURES], train["cnt"])
+    calendar_model = DecisionTreeRegressor(max_depth=8, min_samples_leaf=20, random_state=0)
+    calendar_model.fit(train.loc[:, CALENDAR_FEATURES], train["cnt"])
+    weather_model = DecisionTreeRegressor(max_depth=8, min_samples_leaf=20, random_state=0)
+    weather_model.fit(train.loc[:, FEATURES], train["cnt"])
     return {
         "hour_workday_mean": baseline,
-        "decision_tree": model.predict(test.loc[:, FEATURES]),
+        "calendar_only_decision_tree": calendar_model.predict(test.loc[:, CALENDAR_FEATURES]),
+        "decision_tree": weather_model.predict(test.loc[:, FEATURES]),
     }
 
 
@@ -77,6 +82,7 @@ def evaluate(frame: pd.DataFrame, cutoff: str = CUTOFF) -> dict:
             for name, part in (("train", train), ("test", test))
         },
         "features": list(FEATURES),
+        "calendar_features": list(CALENDAR_FEATURES),
         "tree_parameters": {"max_depth": 8, "min_samples_leaf": 20, "random_state": 0},
         "metrics": metrics,
     }

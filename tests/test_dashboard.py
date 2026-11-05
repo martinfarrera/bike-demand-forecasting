@@ -40,6 +40,7 @@ def test_dashboard_data_includes_patterns_and_model_comparison():
     assert len(payload["weekdays"]) == 7
     assert payload["seasons"][2]["mean"] == 50
     assert payload["models"]["hour_workday_mean"]["mae"] == pytest.approx(25 / 3)
+    assert payload["models"]["calendar_only_decision_tree"]["mae"] == pytest.approx(25 / 3)
     assert payload["models"]["decision_tree"]["mae"] == pytest.approx(25 / 3)
     assert payload["holdout_rows"] == 2
 
@@ -48,6 +49,8 @@ def test_dashboard_is_self_contained_and_discloses_limitations():
     html = render_dashboard(sample_data())
     assert "Bike-sharing demand dashboard" in html
     assert "Observed historical weather" in html
+    assert "Calendar-only decision tree" in html
+    assert "Calendar + weather decision tree" in html
     assert "hourly-mean-chart" in html
     assert "workday-hourly-chart" in html
     assert "non-working days include weekends and holidays" in html

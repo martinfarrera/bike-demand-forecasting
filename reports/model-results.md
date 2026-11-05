@@ -1,6 +1,6 @@
 # Chronological bike-demand evaluation
 
-A modest decision tree beat a train-only hour/workday mean baseline on the final three months of the local UCI hourly data: MAE fell from **79.95 to 70.20 rentals per observed hour** (about 12.2%). This is a retrospective, observed-weather comparison—not evidence of operational future-weather forecasting performance.
+On the final three months of the local UCI hourly data, the calendar-only decision tree had MAE **84.16 rentals per observed hour**, versus **79.95** for the hour/workday mean baseline. A second tree with the same settings plus historical weather had MAE **70.20**, 16.6% lower than the calendar-only tree on this holdout. This is a retrospective comparison: the weather tree uses measurements from the evaluated historical hours, not weather forecasts available at prediction time.
 
 ## Actual results
 
@@ -14,7 +14,8 @@ Target: `cnt`, the total rentals recorded in each hourly observation. The local 
 | Method | MAE (rentals/hour) | RMSE (rentals/hour) |
 |---|---:|---:|
 | Hour/workday training mean | 79.950435 | 119.589266 |
-| Decision tree | 70.195990 | 108.350930 |
+| Calendar-only decision tree | 84.163081 | 131.260837 |
+| Calendar + historical weather decision tree | 70.195990 | 108.350930 |
 
 MAE is mean absolute prediction error; RMSE is the square root of mean squared prediction error. Every observed holdout row has equal weight. These are hourly count errors, not errors on daily aggregates or percentages.
 
@@ -23,14 +24,14 @@ MAE is mean absolute prediction error; RMSE is the square root of mean squared p
 - Sort by the dataset's date plus hour, interpreted as timezone-naive source timestamps. Train on timestamps strictly before **2012-10-01**; test on timestamps at or after it. Reject missing/invalid or duplicate timestamps, nonfinite model inputs/targets, negative targets, and empty partitions.
 - Keep missing hours absent: do not interpolate, manufacture zero-demand observations, or randomly split rows. The holdout has 2,168 observed hours, rather than all 2,208 calendar hours in that quarter.
 - Fit the baseline using training `cnt` means grouped by `hr` and `workingday`. For an unseen group, use the overall training mean. No holdout labels enter baseline fitting.
-- Fit one `DecisionTreeRegressor(max_depth=8, min_samples_leaf=20, random_state=0)` on training data only. Parameters and cutoff were fixed before this evaluation; there is no hyperparameter search, validation-based selection, scaling, imputation, or subsequent refit on holdout labels.
-- Use only `hr`, `weekday`, `mnth`, `yr`, `holiday`, `workingday`, `weathersit`, `temp`, `atemp`, `hum`, and `windspeed`. Numeric codes are passed directly to the tree, not one-hot encoded. Weather inputs retain UCI's supplied normalization.
+- Fit two `DecisionTreeRegressor(max_depth=8, min_samples_leaf=20, random_state=0)` models on training data only, with identical settings. The calendar-only tree uses `hr`, `weekday`, `mnth`, `yr`, `holiday`, and `workingday`; the weather-enhanced tree adds `weathersit`, `temp`, `atemp`, `hum`, and `windspeed`. Parameters and cutoff were fixed before this evaluation; there is no hyperparameter search, validation-based selection, scaling, imputation, or subsequent refit on holdout labels.
+- Numeric codes are passed directly to each tree, not one-hot encoded. Weather inputs retain UCI's supplied normalization.
 - Exclude `cnt` and its exact components `casual` and `registered` from predictors, as well as row identifier `instant` and raw timestamps. Test targets are accessed only for scoring. No target lags or rolling demand statistics are used.
-- Both predictors stay frozen throughout the holdout. This is one chronological holdout, not rolling-origin retraining, a recursive multi-step forecast, or a specified lead-time forecast.
+- The baseline and both trees are fit once on the training partition and stay frozen throughout the holdout. This is one chronological holdout, not rolling-origin retraining, a recursive multi-step forecast, or a specified lead-time forecast.
 
 ## Limitations
 
-**Weather availability is the main boundary.** The tree receives weather measurements from each evaluated historical hour. These observations would not generally be known at a forecast issuance time. Calendar features can be known in advance, but future weather would require forecasts with their own errors. The baseline uses only calendar information, so this comparison does not isolate model capacity from the added information available to the tree. A calendar-only tree and forecast-weather evaluation would be useful follow-ups, not claims established here.
+**Weather availability is the main boundary.** The weather-enhanced tree receives measurements from each evaluated historical hour. These observations would not generally be known at forecast issuance time. The calendar-only tree uses features that can be known in advance, and had higher holdout error than the simple hour/workday mean baseline. The weather-enhanced tree's 16.6% lower MAE than the calendar-only tree suggests that the weather measurements carried additional signal in this retrospective holdout, but does not establish how much forecast weather would help operational predictions; future weather forecasts have their own errors.
 
 The data cover one historical bike-sharing system during 2011–2012. Demand growth, seasonal variation, missing hours, extreme weather, and later operating conditions limit generalization. Only the last quarter is tested; no cross-season backtesting, uncertainty intervals, subgroup error analysis, or statistical significance claims are provided. Missing hours are not assumed to mean zero rentals. Count labels measure observed rentals rather than unconstrained demand or unmet requests. Numeric category ordering is a simplification of this small tree.
 
@@ -47,6 +48,6 @@ PYTHONDONTWRITEBYTECODE=1 python -m src.bike_model --data data/raw/hour.csv
 
 The model command reads local data and prints JSON only. It neither downloads data nor writes results; a missing input file is an explicit error. Raw data remain ignored by Git; this report is explicitly allowed through the reports ignore rule. Dependency versions are not pinned, so exact cross-version reproducibility is not guaranteed.
 
-Focused validation: **12 tests passed**, covering chronological sorting and cutoff assignment, invalid input rejection, empty partitions, training-only predictions without test targets, exclusion of target components, baseline fallback, and metric arithmetic.
+Focused validation: **13 tests passed**, covering chronological sorting and cutoff assignment, invalid input rejection, empty partitions, training-only predictions without test targets, exclusion of target components, baseline fallback, model feature isolation, and metric arithmetic.
 
-Source and attribution: [UCI Bike Sharing dataset](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset), CC BY 4.0; see [raw-data provenance](../data/raw/README.md). This implements T2's S1–S2 model-comparison work only; the static dashboard and final project-wide checks remain T3–T4.
+Source and attribution: [UCI Bike Sharing dataset](https://archive.ics.uci.edu/dataset/275/bike+sharing+dataset), CC BY 4.0; see [raw-data provenance](../data/raw/README.md). This implements T2 and T7's S1–S2 model-comparison work alongside the static dashboard (T3) and project checks (T4).
